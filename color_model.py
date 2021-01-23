@@ -55,7 +55,7 @@ def makeHist_RGB(frame):
 
 def makeHist_GRAY(frame):
     '''
-    Compute the histogram in gray-scale of a given frame.
+    Compute the histogram in grayscale of a given frame.
     --------------------------------
     INPUT:
         frame: array
