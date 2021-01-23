@@ -29,7 +29,7 @@ def CaptureVideo(video, method=1, color_hist=1, init_hypotheses=0, init_pf=False
         video: int or str
             Real time video capture from webcam (int=0) or a pre-recorded video (str=" ")
         color_hist: bool
-            1 (=default) if tracking with color histogram, 0 if tracking with gray scale histogram
+            1 (=default) if tracking with color histogram, 0 if tracking with grayscale histogram
         init_hypotheses: bool
             0 (=default) if initialize in roi, 1 if initialize over the whole frame
         init_pf: bool
@@ -66,7 +66,7 @@ def CaptureVideo(video, method=1, color_hist=1, init_hypotheses=0, init_pf=False
                     cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'),
                     30, #fps
                     (width, height), # frame size
-                    isColor=True) # gray scale -> false
+                    isColor=True) # grayscale -> false
     # Create dynamical lists
     bayesE_l_r, bayesE_l_g, bayesE_l_b = [], [], []
     bayesE_u_r, bayesE_u_g, bayesE_u_b = [], [], []
@@ -108,12 +108,17 @@ def CaptureVideo(video, method=1, color_hist=1, init_hypotheses=0, init_pf=False
                 # particle filter algorithm
                 S_hat = pf.predict()
                 frame_S_est, S_est, E_l, E_u = pf.measurementUpdate(S_hat, hist_ref, frame)
-                bayesE_l_r.append(E_l[0])
-                bayesE_l_g.append(E_l[1])
-                bayesE_l_b.append(E_l[2])
-                bayesE_u_r.append(E_u[0])
-                bayesE_u_g.append(E_u[1])
-                bayesE_u_b.append(E_u[2])
+                if color_hist:
+                    bayesE_l_r.append(E_l[0])
+                    bayesE_l_g.append(E_l[1])
+                    bayesE_l_b.append(E_l[2])
+                    bayesE_u_r.append(E_u[0])
+                    bayesE_u_g.append(E_u[1])
+                    bayesE_u_b.append(E_u[2])
+                else:
+                    bayesE_l_g.append(E_l)
+                    bayesE_u_g.append(E_u)
+
                 frame = frame_S_est
                 # plot predicted and estimated state positions
                 for i in range(len(S_hat[0])):
@@ -144,15 +149,20 @@ def CaptureVideo(video, method=1, color_hist=1, init_hypotheses=0, init_pf=False
                 break
             
         else:
-            plt.plot(frame_vec[:-2], bayesE_l_r, '--r', label='lower bound')
-            plt.plot(frame_vec[:-2], bayesE_l_g, '--g', label='lower bound')
-            plt.plot(frame_vec[:-2], bayesE_l_b, '--b', label='lower bound')
-            plt.plot(frame_vec[:-2], bayesE_u_r, 'r', label='upper bound')
-            plt.plot(frame_vec[:-2], bayesE_u_g, 'g', label='upper bound')
-            plt.plot(frame_vec[:-2], bayesE_u_b, 'b', label='upper bound')
+            if color_hist:
+                plt.plot(frame_vec[:-2], bayesE_l_r, '--r', label='lower bound')
+                plt.plot(frame_vec[:-2], bayesE_l_g, '--g', label='lower bound')
+                plt.plot(frame_vec[:-2], bayesE_l_b, '--b', label='lower bound')
+                plt.plot(frame_vec[:-2], bayesE_u_r, 'r', label='upper bound')
+                plt.plot(frame_vec[:-2], bayesE_u_g, 'g', label='upper bound')
+                plt.plot(frame_vec[:-2], bayesE_u_b, 'b', label='upper bound')
+                plt.title('Bayes error for RGB histogram')
+            else:
+                plt.plot(frame_vec[:-2], bayesE_l_g, label='lower bound')
+                plt.plot(frame_vec[:-2], bayesE_u_g, label='upper bound')
+                plt.title('Bayes error for grayscale')
             plt.xlabel('Frame number')
             plt.ylabel('Error')
-            plt.title('Bayes error')
             plt.legend(loc='lower left')
             plt.show()
             plt.savefig('bayeserror_54.png')
