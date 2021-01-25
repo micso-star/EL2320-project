@@ -36,8 +36,7 @@ def getParams(roi_coord, frame_size, init_hypotheses, M):
     h = roi_coord[3]
     x_max = tuple(map(operator.add, x, w))
     y_max = tuple(map(operator.add, y, h))
-    print(x, w, x_max, y, h, y_max)
-    
+
     if init_hypotheses:
         # Generate particle set from random uniform distribution (cumulative) for M no. of particles over the whole frame
         S = [[np.random.randint(0, frame_size[0], size=M)], 

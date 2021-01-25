@@ -11,7 +11,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import math
-import cv2 
 
 # Load classes and functions
 from initialparams import getParams
@@ -19,7 +18,7 @@ from initialparams import getParams
 from color_model import makeHist_GRAY, makeHist_RGB, distance, epanechnikovKernel
 
 class particleFilter():
-    def __init__(self, coord_target, frame_size, roi_size, method, color_hist, init_hypotheses, detect, M=100):
+    def __init__(self, coord_target, frame_size, roi_size, method, color_hist, init_hypotheses, frame_no, M=100):
         '''
         Initialization of the particle filter
         ----------------------------------------
@@ -36,7 +35,8 @@ class particleFilter():
                 initialize particles over the whole frame or over a chosen region
             M: int
                 no. of particles
-
+            frame_no: int
+                Current frame
         OTHER PARAMETERS:
             S: array
                 prior particle set
@@ -48,30 +48,37 @@ class particleFilter():
                 covariance matrix of the motion model
             Sigma_Q: float
                 covariance matrix (1-dim) of the measurement model
-            weights=1/M: array
+            A: array
+                Transition matrix
+            weights: array
                 particle weights
             Nt: float
                 threshold value used in resampling
-
         ----------------------------------------
         '''   
-        # initialize state, control
-        S = getParams(coord_target, frame_size, init_hypotheses, M) 
+        self.M = M
+        # initialize state
+        S = getParams(coord_target, frame_size, init_hypotheses, self.M) 
         self.S = S 
         self.var_R = 10 #5 or 10
         mu = np.zeros(np.size(S, 0))
         self.mu = mu.reshape(len(S), 1)
         self.Sigma_R = np.eye(np.size(S, 0))*self.var_R
         self.Sigma_Q = 0.1 #0.1
+        self.A = [[1, 0, 1, 0, 1, 0], 
+            [0, 1, 0, 1, 0 , 1], 
+            [0, 0, 1, 0, 1, 0],
+            [0, 0, 0, 1, 0, 1],
+            [0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 1]]
         self.frame_size = frame_size
         self.roi_size = roi_size
-        self.M = M
         self.weights = np.full((1, self.M), 1/self.M)
         self.Nt = 0.96
+        self.frame_no = frame_no
         self.method = method
         self.color_hist = color_hist
         self.init_hypotheses = init_hypotheses
-        self.detect = detect
 
     def predict(self):
         '''
@@ -89,18 +96,9 @@ class particleFilter():
         randn_mtx = np.random.normal(self.mu, std, np.size(rep_tile)).astype(int) # matrix with random integers from a normal distribution (Gaussian white noise)
         randn_mtx = np.reshape(randn_mtx, (np.size(rep_tile, 0), np.size(rep_tile, 1)))
         diffusion = np.multiply(rep_tile, randn_mtx) # drawn samples from normal distribution with zero mean and std = sqrt(Sigma_R)
-        
-        # transition matrix
-        # A = [[1, 0, 1, 0],[0, 1, 0, 1],[0, 0, 1, 0],[0, 0, 0, 1]]
-        A = [[1, 0, 1, 0, 1, 0], 
-            [0, 1, 0, 1, 0 , 1], 
-            [0, 0, 1, 0, 1, 0],
-            [0, 0, 0, 1, 0, 1],
-            [0, 0, 0, 0, 1, 0],
-            [0, 0, 0, 0, 0, 1]]
 
         #new state
-        S_hat = np.dot(A, self.S) + diffusion 
+        S_hat = np.dot(self.A, self.S) + diffusion 
         S_hat = S_hat.astype(int) # to follow pixel values
 
         # Force particle positions to be within the frame
@@ -116,7 +114,7 @@ class particleFilter():
 
         return self.S
 
-    def measurementUpdate(self, S_hat, hist_target, frame):
+    def measurementUpdate(self, S_hat, hist_target, frame, frame_no):
         '''
         Measurement update based on color histograms. The weights are updated based on the observations.
         ----------------------------------------
@@ -127,15 +125,15 @@ class particleFilter():
                 reference histogram of the object
             frame: array
                 original input frame
+            frame_no: int
+                current frame
         OUTPUT:
             frame: array
                 original frame with drawn estimted region
             S_mean: array
                 the estimated state
-            E_l: array
-                lower bound for Bayes error
-            E_u: array
-                upper bound for Bayes error
+            RMSE: array
+                Root mean square error of the target and candidate histogram
         ----------------------------------------
         '''
         frame_candidate = np.copy(frame)
@@ -151,8 +149,8 @@ class particleFilter():
         likelihood = np.zeros(self.M)
         p = np.zeros(self.M)
         D = np.zeros([len(hist_target), self.M])
-        Ebay_l = np.zeros([len(hist_target), self.M])
-        Ebay_u = np.zeros([len(hist_target), self.M])
+        Euclidian = np.zeros([len(hist_target), self.M])
+        histogram_vec = []
         X_min = np.zeros(np.size(S_hat[0]))  
         X_max = np.zeros(np.size(S_hat[0]))
         Y_min = np.zeros(np.size(S_hat[1]))
@@ -174,30 +172,38 @@ class particleFilter():
         k_target = epanechnikovKernel(self.roi_size, self.M)
 
         for i in range(self.M):
-
             # compute the histograms of the candidate regions for each particle 
             roi_candidate = frame_candidate[Y_min[i]: Y_max[i], X_min[i]: X_max[i]]
             
             if self.color_hist:
                 hist_candidate, bins = makeHist_RGB(roi_candidate)
-                # if i==3 or i==52 or i==85:
-                #     plt.hist(hist_candidate[0], bins=bins, density=True)
-                #     plt.hist(hist_candidate[1], bins=bins, density=True)
-                #     plt.hist(hist_candidate[2], bins=bins, density=True)
+                if frame_no==self.frame_no:
+                    histogram_vec.append(hist_candidate)
             elif self.color_hist==0:
-                hist_candidate = makeHist_GRAY(roi_candidate)
+                hist_candidate, bins = makeHist_GRAY(roi_candidate)
             else:
                 continue
- 
-            D[:, i], Ebay_l[:, i], Ebay_u[:, i] = distance(hist_target, hist_candidate, roi_candidate, k_target, self.M, self.method) 
+            # Compute the similarity between two regions
+            D[:, i], Euclidian[:, i] = distance(hist_target, hist_candidate, roi_candidate, k_target, self.M, self.method) 
         
-        E_l = np.sum(Ebay_l, axis=1)/self.M
-        E_u = np.sum(Ebay_u, axis=1)/self.M
+        Euclidian_avg = np.sum(Euclidian, axis=1)/self.M
+        RMSE = np.sqrt(Euclidian_avg)
+
+        if frame_no==self.frame_no:
+            hist_candidate = np.sum(histogram_vec, axis=1)
+
+
+            plt.figure()
+            plt.hist(hist_candidate[0], bins=bins[0], density=True, color=['r', 'r', 'r', 'r', 'r', 'r', 'r', 'r'])
+            plt.hist(hist_candidate[1], bins=bins[1], density=True, color=['g', 'g', 'g', 'g', 'g', 'g', 'g', 'g'])
+            plt.hist(hist_candidate[2], bins=bins[2], density=True, color=['b', 'b', 'b', 'b', 'b', 'b', 'b', 'b'])
+            plt.title('RGB histogram frame' + str(self.frame_no))
+            plt.show()
 
         # Importance weights
         p = 1
         for j in range(len(D)):
-            p = (1/math.sqrt(2*math.pi*self.Sigma_Q))*np.exp(-D[j]**2/(2*self.Sigma_Q**2))*p
+            p = (1/math.sqrt(2*math.pi*self.Sigma_Q**2))*np.exp(-D[j]**2/(2*self.Sigma_Q**2))*p
         
         likelihood = p
         self.weights = np.multiply(self.weights, likelihood)
@@ -208,7 +214,6 @@ class particleFilter():
 
         # Resample
         Neff = 1/(self.M*np.sum(self.weights**2))
-        print('Neff', Neff)
 
         if Neff < self.Nt:
             # Systematic resampling:
@@ -230,4 +235,4 @@ class particleFilter():
         S_mean = S_mean.astype(int) # to closest pixel values
         cv2.rectangle(frame, (S_mean[0] - w//2, S_mean[1] - h//2), (S_mean[0] + w//2, S_mean[1] + h//2), (255, 0, 0), 3) # estimated region
         
-        return frame, S_mean, E_l, E_u
+        return frame, S_mean, RMSE

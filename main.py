@@ -21,7 +21,7 @@ from particlefilter import particleFilter
 from framefunctions import findROI
 from color_model import makeHist_GRAY, makeHist_RGB
 
-def CaptureVideo(video, method=1, color_hist=1, init_hypotheses=0, init_pf=False, frame_no=0):
+def CaptureVideo(video, method=0, color_hist=0, init_hypotheses=0, init_pf=False, frame_no=0):
     '''
     Tracking of an object with a particle filter. 
     --------------------------------
@@ -62,14 +62,13 @@ def CaptureVideo(video, method=1, color_hist=1, init_hypotheses=0, init_pf=False
     # Save video if using webcam
     if video_frame: #video:
 
-        videoOutput = cv2.VideoWriter('object_tracking54_1.avi',
+        videoOutput = cv2.VideoWriter('object_tracking_video54_rgb.avi',
                     cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'),
                     30, #fps
                     (width, height), # frame size
                     isColor=True) # grayscale -> false
     # Create dynamical lists
-    bayesE_l_r, bayesE_l_g, bayesE_l_b = [], [], []
-    bayesE_u_r, bayesE_u_g, bayesE_u_b = [], [], []
+    RMSE_vec = []
     frame_vec = []
 
 
@@ -77,7 +76,8 @@ def CaptureVideo(video, method=1, color_hist=1, init_hypotheses=0, init_pf=False
 
         ret, frame = vidCapture.read() # returns boolean value 1 if succeding reading and frame is the captured frame
         frame_no += 1 # counter
-        frame_vec.append(frame_no)
+        if init_pf== True:
+            frame_vec.append(frame_no)
         if ret == True:
 
             if init_pf == False:
@@ -90,34 +90,24 @@ def CaptureVideo(video, method=1, color_hist=1, init_hypotheses=0, init_pf=False
                 # create a histogram  for target reference
                 if color_hist:
                     hist_ref, bins = makeHist_RGB(roi_target)
-                    # color = ('r', 'g', 'b')
-                    # ch_id = (0, 1, 2)
-                    # for i, c in zip(ch_id, color):
-                    #     plt.plot(bins[0:-1], hist_ref[i], color=c)
-                    #plt.hist(bins[:-1], bins, weights=hist_ref, density=True)
-                    #plt.hist(hist_ref[0], bins=bins, density=True)
-                    #plt.hist(hist_ref[1], bins=bins, density=True)
-                    #plt.hist(hist_ref[2], bins=bins, density=True)
-                    #plt.savefig('target_histogram.png')
+                    # plt.figure()
+                    # plt.hist(hist_ref[0], bins=bins[0], density=True, color=['r', 'r', 'r', 'r', 'r', 'r', 'r', 'r'])
+                    # plt.hist(hist_ref[1], bins=bins[1], density=True, color=['g', 'g', 'g', 'g', 'g', 'g', 'g', 'g'])
+                    # plt.hist(hist_ref[2], bins=bins[2], density=True, color=['b', 'b', 'b', 'b', 'b', 'b', 'b', 'b'])
+                    # plt.title('RGB histogram target frame')
+                    # plt.show()
                 else:
-                    hist_ref = makeHist_GRAY(roi_target)
+                    hist_ref, bins = makeHist_GRAY(roi_target)
                 # initialize particle filter
-                pf = particleFilter(roi_coord, frame_size_org, roi_size, method, color_hist, init_hypotheses, detect)
+                pf = particleFilter(roi_coord, frame_size_org, roi_size, method, color_hist, init_hypotheses, frame_no)
 
             elif init_pf == True:
                 # particle filter algorithm
                 S_hat = pf.predict()
-                frame_S_est, S_est, E_l, E_u = pf.measurementUpdate(S_hat, hist_ref, frame)
-                if color_hist:
-                    bayesE_l_r.append(E_l[0])
-                    bayesE_l_g.append(E_l[1])
-                    bayesE_l_b.append(E_l[2])
-                    bayesE_u_r.append(E_u[0])
-                    bayesE_u_g.append(E_u[1])
-                    bayesE_u_b.append(E_u[2])
-                else:
-                    bayesE_l_g.append(E_l)
-                    bayesE_u_g.append(E_u)
+                frame_S_est, S_est, RMSE = pf.measurementUpdate(S_hat, hist_ref, frame, frame_no)
+                # rmse for current frame
+                RMSE_vec.append(RMSE.sum()/len(RMSE))
+
 
                 frame = frame_S_est
                 # plot predicted and estimated state positions
@@ -127,45 +117,31 @@ def CaptureVideo(video, method=1, color_hist=1, init_hypotheses=0, init_pf=False
      
             else:
                 continue
-
+        
             cv2.imshow('result', frame)
-            #videoOutput.write(frame)
-
+            videoOutput.write(frame)
+            #cv2.imwrite("image54_"+str(frame_no)+".png", frame)
+        
             # Press Q to exit
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 
-                plt.plot(frame_vec[:-1], bayesE_l_r, '--r', label='lower bound')
-                plt.plot(frame_vec[:-1], bayesE_l_g, '--g', label='lower bound')
-                plt.plot(frame_vec[:-1], bayesE_l_b, '--b', label='lower bound')
-                plt.plot(frame_vec[:-1], bayesE_u_r, 'r', label='upper bound')
-                plt.plot(frame_vec[:-1], bayesE_u_g, 'g', label='upper bound')
-                plt.plot(frame_vec[:-1], bayesE_u_b, 'b', label='upper bound')
-                plt.xlabel('Frame number')
-                plt.ylabel('Error')
-                plt.title('Bayes error')
-                plt.legend(loc='lower left')
-                plt.show()
-                plt.savefig('bayeserror_54break.png')
                 break
             
         else:
             if color_hist:
-                plt.plot(frame_vec[:-2], bayesE_l_r, '--r', label='lower bound')
-                plt.plot(frame_vec[:-2], bayesE_l_g, '--g', label='lower bound')
-                plt.plot(frame_vec[:-2], bayesE_l_b, '--b', label='lower bound')
-                plt.plot(frame_vec[:-2], bayesE_u_r, 'r', label='upper bound')
-                plt.plot(frame_vec[:-2], bayesE_u_g, 'g', label='upper bound')
-                plt.plot(frame_vec[:-2], bayesE_u_b, 'b', label='upper bound')
-                plt.title('Bayes error for RGB histogram')
+                plt.figure()
+                plt.plot(frame_vec[:-1], RMSE_vec, label='rmse rgb')
+                plt.title('RMSE for RGB histogram, video 1')
             else:
-                plt.plot(frame_vec[:-2], bayesE_l_g, label='lower bound')
-                plt.plot(frame_vec[:-2], bayesE_u_g, label='upper bound')
-                plt.title('Bayes error for grayscale')
+                plt.figure()
+                plt.plot(frame_vec[:-1], RMSE_vec, label='rmse grayscale')
+                plt.title('RMSE for grayscale histogram, video 1')
+                
             plt.xlabel('Frame number')
-            plt.ylabel('Error')
+            plt.ylabel('RMSE')
             plt.legend(loc='lower left')
             plt.show()
-            plt.savefig('bayeserror_54.png')
+            plt.savefig('rmse_54.png')
             break
 
     # release the captured video object
@@ -179,9 +155,7 @@ if __name__ == "__main__":
         video = "IMG_8754.m4v"#"object_tracking3.avi" # Input file. 0 if front camera (web camera)
 
         # Tracking choices/variations:
-        method = 0 # 0=Bhattacharyya distance (default), 1=Euclidian distance
-        color_hist = 0 # 1=rgb, 0=gray scale
-        init_hypotheses = 0 # 0=in roi, 1=whole frame
-        detect=0 #0=never update roi, 1=re-detection, 2=update roi
+        color_hist = 1 # 1=rgb (default), 0=grayscale
+        init_hypotheses = 0 # 0=in roi (default), 1=whole frame
 
         CaptureVideo(video)

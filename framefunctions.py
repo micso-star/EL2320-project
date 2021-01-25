@@ -34,7 +34,7 @@ def findROI(frame):
     frame_color = np.copy(frame)
 
     face_cascade = cv2.CascadeClassifier('opencv/data/haarcascades/haarcascade_frontalface_alt.xml')
-    frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # make gray-scale
+    frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # make grayscale
     frame_gray = cv2.equalizeHist(frame_gray)
 
     detected = face_cascade.detectMultiScale(frame_gray,
