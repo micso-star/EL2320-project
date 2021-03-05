@@ -1,5 +1,5 @@
 # EL2320-project
-Single face detection and tracking with a particle filter and Haar cascade detection.
+Single face detection and tracking with a color-based particle filter using Haar cascade.
 
 ![image](https://user-images.githubusercontent.com/60075944/109576167-9297de00-7af3-11eb-843d-ed5b166b0abf.png)
 ![image](https://user-images.githubusercontent.com/60075944/109577162-6d0bd400-7af5-11eb-8046-5c24f04dc34b.png)
